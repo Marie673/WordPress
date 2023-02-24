@@ -5,7 +5,7 @@ Description:
 
 Parameters:
   DatabaseMasterName:
-    Description: Database Master User Namee
+    Description: Database Master User Name
     Type : String
     Default: wordpress
   DatabaseMasterPassword:
@@ -25,57 +25,141 @@ Parameters:
 
 Resources:
   # ------------------------------------------------------------#
+  #  Security Group
+  # ------------------------------------------------------------#
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: EC2SG
+      GroupDescription: Security Group of EC2
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          # ゆめみ
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp:
+          # 自分
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp:
+      Tags:
+        - Key: Name
+          Value: WP-EC2-SG
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ALBSG
+      GroupDescription: Security Group of ALB
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: WP-ALB-SG
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: RDSSG
+      GroupDescription: Security Group of RDS
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: WP-RDS-SG
+
+  EFSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: EFSSG
+      GroupDescription: Security Group of EFS
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: WP-EFS-SG
+
+  # ------------------------------------------------------------#
   #  VPC
   # ------------------------------------------------------------#
   VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.0.0.0/16
-      InstanceTenancy: default
+      CidrBlock: "10.0.0.0/16"
       EnableDnsSupport: true
       EnableDnsHostnames: true
+      InstanceTenancy: "default"
       Tags:
         - Key: Name
-          Value: WP-VPC
+          Value: WP_VPC
 
-  # ------------------------------------------------------------#
-  #  Internet Gateway
-  # ------------------------------------------------------------#
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: WP-VPC-IGW
-          
+          Value: WP_IGW
+
   AttachGateway:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
 
-  # ------------------------------------------------------------#
-  #  Route Table
-  # ------------------------------------------------------------#
-  RouteTable:
+  # Router
+  PublicRouteTable:
     Type: AWS::EC2::RouteTable
-    DependsOn: AttachGateway
     Properties:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: WP-VPC-RTB
-  Route:
+          Value: WP-VPC-PUB-RTB
+
+  PublicRoute:
     Type: AWS::EC2::Route
-    DependsOn: AttachGateway
     Properties:
-      RouteTableId: !Ref RouteTable
+      RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
-  # ------------------------------------------------------------#
-  #  Public Subnet A
-  # ------------------------------------------------------------#
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: WP-VPC-PRI-RTB
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Public SubnetA
   PublicSubnetA:
     Type: AWS::EC2::Subnet
     DependsOn: AttachGateway
@@ -87,15 +171,14 @@ Resources:
       Tags:
         - Key: Name
           Value: WP-VPC-PublicSubnet-A
-  PublicRouteTableAssociation:
+
+  PublicRouteTableAssociationA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PublicSubnetA
-      RouteTableId: !Ref RouteTable
+      RouteTableId: !Ref PublicRouteTable
 
-  # ------------------------------------------------------------#
-  #  Private Subnet A
-  # ------------------------------------------------------------#
+  # Private Subnet A
   PrivateSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
@@ -107,9 +190,13 @@ Resources:
         - Key: Name
           Value: WP-VPC-PrivateSubnet-A
 
-  # ------------------------------------------------------------#
-  #  Public Subnet C
-  # ------------------------------------------------------------#
+  PrivateRouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+
+  # Public Subnet C
   PublicSubnetC:
     Type: AWS::EC2::Subnet
     DependsOn: AttachGateway
@@ -122,9 +209,13 @@ Resources:
         - Key: Name
           Value: WP-VPC-PublicSubnet-C
 
-  # ------------------------------------------------------------#
+  PublicRouteTableAssociationC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetC
+      RouteTableId: !Ref PublicRouteTable
+
   #  Private Subnet C
-  # ------------------------------------------------------------#
   PrivateSubnetC:
     Type: AWS::EC2::Subnet
     Properties:
@@ -136,96 +227,139 @@ Resources:
         - Key: Name
           Value: WP-VPC-PrivateSubnet-C
 
-  # ------------------------------------------------------------#
-  #  ALB Security Group
-  # ------------------------------------------------------------#
-  ALBSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
+  PrivateRouteTableAssociationC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      GroupName: WP-ALB-SG
-      GroupDescription: Allow HTTP access from internet
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        # http
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: "0.0.0.0/0"
-        # https
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: "0.0.0.0/0"
+      SubnetId: !Ref PrivateSubnetC
+      RouteTableId: !Ref PrivateSubnetC
+  # ------------------------------------------------------------#
+  #  RDS
+  # ------------------------------------------------------------#
+  RDSSubnetGroup:
+    Type: AWS::Neptune::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: wp_dbsubnet
+      DBSubnetGroupDescription: dedicated to wp-rds
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetC
       Tags:
         - Key: Name
-          Value: WP-ALB-SG
+          Value: WP-DB-Subnet
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: WP-RDS-Database
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      EngineVersion: "8.0.28"
+      MasterUsername: !Ref DatabaseMasterName
+      MasterUserPassword: !Ref DatabaseMasterPassword
+      DBName: !Ref DatabaseName
+      BackupRetentionPeriod: 0
+      MultiAZ: true
+      PubliclyAccessible: false
+      StorageType: gp2
+      AllocatedStorage: "20"
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: false
+      StorageEncrypted: true
+      DeleteAutomatedBackups: true
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      Tags:
+        - Key: Name
+          Value: WP-RDS
 
   # ------------------------------------------------------------#
-  #  ALB
+  #  EFS  *EC2からマウント作業が必要
   # ------------------------------------------------------------#
-  ApplicationLoadBalancer:
-    Type : AWS::ElasticLoadBalancingV2::LoadBalancer
+  FileSystemResource:
+    Type: AWS::EFS::FileSystem
     Properties:
-      Name: WP-ALB
-      Scheme: "internet-facing"
+      Encrypted: true
+      FileSystemTags:
+        - Key: Name
+          Value: WP-EFS
+
+  MountTargetResourceA:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref FileSystemResource
       SecurityGroups:
-        - !Ref ALBSecurityGroup
-      # At least two subnet is needed
-      Subnets:
-        - !Ref PublicSubnetA
-        - !Ref PublicSubnetC
-      Tags:
-        - Key: Name
-          Value: WP-ALB
+        - !Ref EFSSecurityGroup
+      SubnetId: !Ref PublicSubnetA
 
-  # ------------------------------------------------------------#
-  #  EC2 Security Group
-  # ------------------------------------------------------------#
-  EC2SecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    DependsOn: ALBSecurityGroup
+  MountTargetResourceC:
+    Type: AWS::EFS::MountTarget
     Properties:
-      GroupName: WP-EC2-SG
-      GroupDescription: Allow SSH from Internet
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        # SSH
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
-        # HTTP
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          SourceSecurityGroupId: !Ref ALBSecurityGroup
-      Tags:
-        - Key: Name
-          Value: WP-EC2-SG
+      FileSystemId: !Ref FileSystemResource
+      SecurityGroups:
+        - !Ref EFSSecurityGroup
+      SubnetId: !Ref PublicSubnetC
 
   # ------------------------------------------------------------#
-  #  EC2
+  #  EC2 Instance
   # ------------------------------------------------------------#
-  EC2Instance:
+  EC2A:
     Type: AWS::EC2::Instance
     Properties:
-      AvailabilityZone: "ap-northeast-1a"
+      InstanceType: t2.micro
+      ImageId: !Ref EC2AMIId
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref EC2SecurityGroup
+      SubnetId: !Ref PublicSubnetA
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
             VolumeSize: 8
-            VolumeType: gp2
-      ImageId: !Ref EC2AMIId
-      InstanceInitiatedShutdownBehavior: 'stop'
-      InstanceType: t2.micro
-      KeyName: !Ref KeyName
-      SecurityGroupIds:
-        - !Ref EC2SecurityGroup
-      SubnetId: !Ref PublicSubnetA
-      Tenancy: default
+            VolumeType: gp3
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          echo "===========yum -y install httpd==========="
+          yum -y update
+          echo "===========amazon-linux-extras install php7.2 -y==========="
+          amazon-linux-extras install php7.2 -y
+          echo "===========yum -y install mysql httpd php-mbstring php-xml gd php-gd==========="
+          yum -y install mysql httpd php-mbstring php-xml gd php-gd
+          echo "===========yum -y install sudo yum install -y amazon-efs-utils ==========="
+          sudo yum install -y amazon-efs-utils
+          echo "===========systemctl enable/start httpd.service ==========="
+          systemctl enable httpd.service
+          systemctl start httpd.service
+          echo "=========== http://ja.wordpress.org/latest-ja.tar.gz ~/ ==========="
+          wget http://ja.wordpress.org/latest-ja.tar.gz
+          echo "=========== tar zxvf ~/latest-ja.tar.gz ==========="
+          tar zxvf latest-ja.tar.gz
+          echo "=========== cp -r wordpress/* /var/www/html/ ==========="
+          cp -r wordpress/* /var/www/html/
+          chown apache:apache -R /var/www/html
+          cd /var/www/html/
+          mkdir healths
+          cd healths
+          touch wp-check
       Tags:
         - Key: Name
-          Value: WP-EC2-Instance
+          Value: WP-EC2-A
+
+  EC2C:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref EC2AMIId
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref EC2SecurityGroup
+      SubnetId: !Ref PublicSubnetC
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
       UserData:
         Fn::Base64: |
           #!/bin/bash
@@ -249,103 +383,60 @@ Resources:
           mkdir healths
           cd healths
           touch wp-check
+      Tags:
+        - Key: Name
+          Value: WP-EC2-C
+  # ------------------------------------------------------------#
+  #  ALB
+  # ------------------------------------------------------------#
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: WP-ALB
+      Scheme: "internet-facing"
+      Type: "application"
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetC
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: WP-ALB
 
-  # ------------------------------------------------------------#
-  #  Target Group
-  # ------------------------------------------------------------#
   ALBTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      # Health check enabled must be true for target groups with target type 'instance'
-      HealthCheckPath: /healths/wp-check
-      HealthCheckEnabled: True
       Name: WP-ALB-TG
-      Port: 80
+      VpcId: !Ref VPC
       Protocol: HTTP
+      Port: 80
+      TargetType: instance
+      Targets:
+        - Id: !Ref EC2A
+          Port: 80
+        - Id: !Ref EC2C
+          Port: 80
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: "/"
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: "200,301"
       Tags:
         - Key: Name
           Value: WP-ALB-TG
-      Targets:
-        # If the target type is instance, you cannot override the Availability Zone
-        - Id: !Ref EC2Instance
-          Port: 80
-      VpcId: !Ref VPC
 
-  # ------------------------------------------------------------#
-  #  ALB Listner
-  # ------------------------------------------------------------#
   ALBListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
-      DefaultActions:
-        - TargetGroupArn: !Ref ALBTargetGroup
-          Type: forward
       LoadBalancerArn: !Ref ApplicationLoadBalancer
       Port: 80
       Protocol: HTTP
-
-  # ------------------------------------------------------------#
-  #  Database Subnet Group
-  # ------------------------------------------------------------#
-  RDSDBSubnetGroup:
-    Type: AWS::RDS::DBSubnetGroup
-    Properties:
-      DBSubnetGroupDescription: WP-RDS-SubnetGroup
-      DBSubnetGroupName: WP-RDS-SubnetGroup
-      SubnetIds:
-        - !Ref PrivateSubnetA
-        - !Ref PrivateSubnetC
-      Tags:
-        - Key: Name
-          Value: WP-RDS-SubnetGroup
-
-  # ------------------------------------------------------------#
-  #  RDS Security Group
-  # ------------------------------------------------------------#
-  RDSSG:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupName: WP-RDS-SG
-      GroupDescription: Allow Request from WebServer
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        # http
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          SourceSecurityGroupId: !Ref EC2SecurityGroup
-      Tags:
-        - Key: Name
-          Value: WP-RDS-SG
-
-  # ------------------------------------------------------------#
-  #  RDS
-  # ------------------------------------------------------------#
-  RDSDatabase:
-    Type: AWS::RDS::DBInstance
-    Properties:
-      AllocatedStorage: "20"
-      AllowMajorVersionUpgrade: false
-      AutoMinorVersionUpgrade: false
-      AvailabilityZone: ap-northeast-1a
-      BackupRetentionPeriod: 0
-      DBInstanceClass: db.t3.micro
-      DBInstanceIdentifier: WP-RDS-Database
-      DBName: !Ref DatabaseName
-      DBSubnetGroupName: !Ref RDSDBSubnetGroup
-      DeleteAutomatedBackups: false
-      DeletionProtection: false
-      Engine: mysql
-      EngineVersion: 8.0.30
-      MasterUsername: !Ref DatabaseMasterName
-      MasterUserPassword: !Ref DatabaseMasterPassword
-      MaxAllocatedStorage: 1000
-      MultiAZ: false
-      PubliclyAccessible: false
-      StorageEncrypted: false
-      StorageType: gp2
-      Tags:
-        - Key: Name
-          Value: WP-RDS-Database
-      VPCSecurityGroups:
-        - !Ref RDSSG
+      DefaultActions:
+        - TargetGroupArn: !Ref ALBTargetGroup
+          Type: forward
