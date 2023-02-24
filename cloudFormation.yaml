@@ -74,7 +74,7 @@ Resources:
       GatewayId: !Ref InternetGateway
 
   # ------------------------------------------------------------#
-  #  Public Sunbet A
+  #  Public Subnet A
   # ------------------------------------------------------------#
   PublicSubnetA:
     Type: AWS::EC2::Subnet
@@ -94,7 +94,7 @@ Resources:
       RouteTableId: !Ref RouteTable
 
   # ------------------------------------------------------------#
-  #  Private Sunbet A
+  #  Private Subnet A
   # ------------------------------------------------------------#
   PrivateSubnetA:
     Type: AWS::EC2::Subnet
@@ -108,7 +108,7 @@ Resources:
           Value: WP-VPC-PrivateSubnet-A
 
   # ------------------------------------------------------------#
-  #  Public Sunbet C
+  #  Public Subnet C
   # ------------------------------------------------------------#
   PublicSubnetC:
     Type: AWS::EC2::Subnet
@@ -123,7 +123,7 @@ Resources:
           Value: WP-VPC-PublicSubnet-C
 
   # ------------------------------------------------------------#
-  #  Private Sunbet C
+  #  Private Subnet C
   # ------------------------------------------------------------#
   PrivateSubnetC:
     Type: AWS::EC2::Subnet
@@ -150,6 +150,11 @@ Resources:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
+          CidrIp: "0.0.0.0/0"
+        # https
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
           CidrIp: "0.0.0.0/0"
       Tags:
         - Key: Name
