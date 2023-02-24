@@ -22,6 +22,10 @@ Parameters:
   KeyName:
     Description: The EC2 Key Pair to allow SSH access to the instance
     Type: "AWS::EC2::KeyPair::KeyName"
+  YumemiIp:
+    Type : String
+  MyIp:
+    Type: String
 
 Resources:
   # ------------------------------------------------------------#
@@ -42,12 +46,12 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp:
+          CidrIp: !Ref YumemiIp
           # 自分
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp:
+          CidrIp: !Ref MyIp
       Tags:
         - Key: Name
           Value: WP-EC2-SG
@@ -231,7 +235,7 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PrivateSubnetC
-      RouteTableId: !Ref PrivateSubnetC
+      RouteTableId: !Ref PrivateRouteTable
   # ------------------------------------------------------------#
   #  RDS
   # ------------------------------------------------------------#
@@ -253,14 +257,14 @@ Resources:
       DBInstanceIdentifier: WP-RDS-Database
       DBInstanceClass: db.t3.micro
       Engine: mysql
-      EngineVersion: "8.0.28"
+      EngineVersion: 8.0.28
       MasterUsername: !Ref DatabaseMasterName
       MasterUserPassword: !Ref DatabaseMasterPassword
       DBName: !Ref DatabaseName
       BackupRetentionPeriod: 0
       MultiAZ: true
       PubliclyAccessible: false
-      StorageType: gp2
+      StorageType: gp3
       AllocatedStorage: "20"
       AllowMajorVersionUpgrade: false
       AutoMinorVersionUpgrade: false
@@ -309,7 +313,7 @@ Resources:
       InstanceType: t2.micro
       ImageId: !Ref EC2AMIId
       KeyName: !Ref KeyName
-      SecurityGroups:
+      SecurityGroupIds:
         - !Ref EC2SecurityGroup
       SubnetId: !Ref PublicSubnetA
       BlockDeviceMappings:
@@ -352,7 +356,7 @@ Resources:
       InstanceType: t2.micro
       ImageId: !Ref EC2AMIId
       KeyName: !Ref KeyName
-      SecurityGroups:
+      SecurityGroupIds:
         - !Ref EC2SecurityGroup
       SubnetId: !Ref PublicSubnetC
       BlockDeviceMappings:
@@ -386,6 +390,7 @@ Resources:
       Tags:
         - Key: Name
           Value: WP-EC2-C
+
   # ------------------------------------------------------------#
   #  ALB
   # ------------------------------------------------------------#
@@ -440,3 +445,156 @@ Resources:
       DefaultActions:
         - TargetGroupArn: !Ref ALBTargetGroup
           Type: forward
+
+  # ------------------------------------------------------------#
+  #  DEV
+  # ------------------------------------------------------------#
+  DEVSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: DEVSG
+      GroupDescription: Security Group of DEV
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+          # ゆめみ
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref YumemiIp
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref YumemiIp
+          # 自分
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref MyIp
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref MyIp
+
+      Tags:
+        - Key: Name
+          Value: WP-DEV-SG
+
+  PublicSubnetDEV:
+    Type: AWS::EC2::Subnet
+    DependsOn: AttachGateway
+    Properties:
+      AvailabilityZone: "ap-northeast-1a"
+      CidrBlock: 10.0.5.0/24
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: WP-VPC-PublicSubnet-DEV
+
+  PublicRouteTableAssociationDEV:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetDEV
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetDEV2:
+    Type: AWS::EC2::Subnet
+    DependsOn: AttachGateway
+    Properties:
+      AvailabilityZone: "ap-northeast-1c"
+      CidrBlock: 10.0.6.0/24
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: WP-VPC-PublicSubnet-DEV
+
+  PublicRouteTableAssociationDEV2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetDEV2
+      RouteTableId: !Ref PublicRouteTable
+
+  RDSSubnetGroupDEV:
+    Type: AWS::Neptune::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: wp_dbsubnet-dev
+      DBSubnetGroupDescription: dedicated to wp-rds-dev
+      SubnetIds:
+        - !Ref PublicSubnetDEV
+        - !Ref PublicSubnetDEV2
+      Tags:
+        - Key: Name
+          Value: WP-DB-Subnet-DEV
+
+  RDSInstanceDEV:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: "20"
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: false
+      AvailabilityZone: ap-northeast-1a
+      BackupRetentionPeriod: 0
+      DBInstanceClass: db.t3.micro
+      DBInstanceIdentifier: WP-RDS-Database-DEV
+      DBName: !Ref DatabaseName
+      DBSubnetGroupName: !Ref RDSSubnetGroupDEV
+      DeleteAutomatedBackups: false
+      DeletionProtection: false
+      Engine: mysql
+      EngineVersion: 8.0.28
+      MasterUsername: !Ref DatabaseMasterName
+      MasterUserPassword: !Ref DatabaseMasterPassword
+      MaxAllocatedStorage: 1000
+      MultiAZ: false
+      PubliclyAccessible: false
+      StorageEncrypted: false
+      StorageType: gp3
+      Tags:
+        - Key: Name
+          Value: WP-RDS-Database-DEV
+      VPCSecurityGroups:
+        - !Ref DEVSecurityGroup
+
+  EC2DEV:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref EC2AMIId
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref DEVSecurityGroup
+      SubnetId: !Ref PublicSubnetDEV
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          echo "===========yum -y install httpd==========="
+          yum -y update
+          echo "===========amazon-linux-extras install php7.2 -y==========="
+          amazon-linux-extras install php7.2 -y
+          echo "===========yum -y install mysql httpd php-mbstring php-xml gd php-gd==========="
+          yum -y install mysql httpd php-mbstring php-xml gd php-gd
+          echo "===========yum -y install sudo yum install -y amazon-efs-utils ==========="
+          sudo yum install -y amazon-efs-utils
+          echo "===========systemctl enable/start httpd.service ==========="
+          systemctl enable httpd.service
+          systemctl start httpd.service
+          echo "=========== http://ja.wordpress.org/latest-ja.tar.gz ~/ ==========="
+          wget http://ja.wordpress.org/latest-ja.tar.gz
+          echo "=========== tar zxvf ~/latest-ja.tar.gz ==========="
+          tar zxvf latest-ja.tar.gz
+          echo "=========== cp -r wordpress/* /var/www/html/ ==========="
+          cp -r wordpress/* /var/www/html/
+          chown apache:apache -R /var/www/html
+          cd /var/www/html/
+          mkdir healths
+          cd healths
+          touch wp-check
+      Tags:
+        - Key: Name
+          Value: WP-EC2-DEV
